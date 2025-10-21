@@ -22,12 +22,21 @@ set -e
 cleanup() {
     echo ""
     echo -e "${YELLOW}🛑 Stopping all services...${NC}"
-    pkill -f 'node dist/main.js' || true
-    pkill -f 'npm run dev' || true
-    pkill -f 'serve_cors.py' || true
-    pkill -f 'python3 serve_cors' || true
-    pkill -f 'serve.*5174' || true
-    pkill -f 'serve.*5175' || true
+
+    # Try pkill first (Linux/Mac), then taskkill (Windows)
+    if command -v pkill &> /dev/null; then
+        pkill -f 'node dist/main.js' || true
+        pkill -f 'npm run dev' || true
+        pkill -f 'serve_cors.py' || true
+        pkill -f 'python3 serve_cors' || true
+        pkill -f 'serve.*5174' || true
+        pkill -f 'serve.*5175' || true
+    else
+        # Windows fallback
+        taskkill /F /IM node.exe 2>/dev/null || true
+        taskkill /F /IM python.exe 2>/dev/null || true
+    fi
+
     sleep 1
     echo -e "${GREEN}✅ All services stopped${NC}"
 }
@@ -166,9 +175,11 @@ if docker ps | grep -q "postgres-users"; then
     print_warning "postgres-users container already running"
 else
     docker-compose up -d postgres-users postgres-finance 2>/dev/null || print_warning "Could not start Docker containers"
+    print_step "Waiting for containers to initialize..."
+    sleep 5
 fi
 
-# Wait for databases to be ready with retry logic
+# Wait for databases to be ready with retry logic (infinite retry)
 print_step "Waiting for databases to be ready..."
 wait_for_db() {
     local host=$1
@@ -176,26 +187,22 @@ wait_for_db() {
     local user=$3
     local password=$4
     local db=$5
-    local max_attempts=30
     local attempt=0
 
-    while [ $attempt -lt $max_attempts ]; do
+    while true; do
         if PGPASSWORD="$password" psql -h "$host" -p "$port" -U "$user" -d "$db" -c "SELECT 1" >/dev/null 2>&1; then
             print_success "Database $db is ready"
             return 0
         fi
         attempt=$((attempt + 1))
         echo -n "."
-        sleep 1
+        sleep 2
     done
-
-    print_error "Database $db did not become ready after ${max_attempts}s"
-    return 1
 }
 
-# Wait for both databases
-wait_for_db "localhost" "5432" "postgres" "postgres" "users_db" || print_warning "Could not connect to users_db"
-wait_for_db "localhost" "5433" "postgres" "postgres" "finance_db" || print_warning "Could not connect to finance_db"
+# Wait for both databases (will wait indefinitely until they're ready)
+wait_for_db "localhost" "5432" "postgres" "postgres" "users_db"
+wait_for_db "localhost" "5433" "postgres" "postgres" "finance_db"
 
 sleep 2
 
