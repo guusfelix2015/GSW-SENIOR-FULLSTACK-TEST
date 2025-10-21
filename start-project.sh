@@ -170,9 +170,10 @@ print_header "STEP 4: SETTING UP DATABASE"
 print_step "Starting PostgreSQL containers..."
 cd "$PROJECT_ROOT"
 
-# Remove old containers to avoid password conflicts
-print_step "Cleaning up old containers..."
-docker-compose down 2>/dev/null || true
+# Remove only old postgres containers to avoid password conflicts
+print_step "Cleaning up old PostgreSQL containers..."
+docker stop postgres-users postgres-finance 2>/dev/null || true
+docker rm postgres-users postgres-finance 2>/dev/null || true
 sleep 2
 
 # Start fresh containers
