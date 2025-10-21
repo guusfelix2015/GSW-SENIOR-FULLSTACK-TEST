@@ -1,0 +1,212 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # DATABASES
+  # ============================================================================
+
+  postgres-users:
+    image: postgres:15-alpine
+    container_name: postgres-users
+    environment:
+      POSTGRES_DB: ${DB_USERS_NAME:-users_db}
+      POSTGRES_USER: ${DB_USERS_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_USERS_PASSWORD:-postgres}
+    ports:
+      - "${DB_USERS_PORT:-5432}:5432"
+    volumes:
+      - postgres_users_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERS_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-finance:
+    image: postgres:15-alpine
+    container_name: postgres-finance
+    environment:
+      POSTGRES_DB: ${DB_FINANCE_NAME:-finance_db}
+      POSTGRES_USER: ${DB_FINANCE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_FINANCE_PASSWORD:-postgres}
+    ports:
+      - "${DB_FINANCE_PORT:-5433}:5432"
+    volumes:
+      - postgres_finance_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_FINANCE_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # BACKEND SERVICES
+  # ============================================================================
+
+  api-gateway:
+    build:
+      context: ./top-api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      USERS_SERVICE_HOST: top-users
+      USERS_SERVICE_PORT: 5000
+      FINANCE_SERVICE_HOST: top-finance
+      FINANCE_SERVICE_PORT: 5001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - top-users
+      - top-finance
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  top-users:
+    build:
+      context: ./top-users
+      dockerfile: Dockerfile
+    container_name: top-users
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3001
+      TCP_PORT: 5000
+      DB_HOST: postgres-users
+      DB_PORT: 5432
+      DB_NAME: ${DB_USERS_NAME:-users_db}
+      DB_USER: ${DB_USERS_USER:-postgres}
+      DB_PASSWORD: ${DB_USERS_PASSWORD:-postgres}
+    ports:
+      - "3001:3001"
+      - "5000:5000"
+    depends_on:
+      postgres-users:
+        condition: service_healthy
+    volumes:
+      - ./top-users:/app
+      - /app/node_modules
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  top-finance:
+    build:
+      context: ./top-finance
+      dockerfile: Dockerfile
+    container_name: top-finance
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3002
+      TCP_PORT: 5001
+      DB_HOST: postgres-finance
+      DB_PORT: 5432
+      DB_NAME: ${DB_FINANCE_NAME:-finance_db}
+      DB_USER: ${DB_FINANCE_USER:-postgres}
+      DB_PASSWORD: ${DB_FINANCE_PASSWORD:-postgres}
+    ports:
+      - "3002:3002"
+      - "5001:5001"
+    depends_on:
+      postgres-finance:
+        condition: service_healthy
+    volumes:
+      - ./top-finance:/app
+      - /app/node_modules
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # FRONTEND SERVICES
+  # ============================================================================
+
+  frontend:
+    build:
+      context: ./top-frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      VITE_API_URL: http://api-gateway:3000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api-gateway
+    volumes:
+      - ./top-frontend:/app
+      - /app/node_modules
+    networks:
+      - app-network
+
+  frontend-users:
+    build:
+      context: ./top-frontend-users
+      dockerfile: Dockerfile
+    container_name: frontend-users
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      VITE_API_URL: http://api-gateway:3000
+    ports:
+      - "5174:5174"
+    depends_on:
+      - api-gateway
+    volumes:
+      - ./top-frontend-users:/app
+      - /app/node_modules
+    networks:
+      - app-network
+
+  frontend-finance:
+    build:
+      context: ./top-frontend-finance
+      dockerfile: Dockerfile
+    container_name: frontend-finance
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      VITE_API_URL: http://api-gateway:3000
+    ports:
+      - "5175:5175"
+    depends_on:
+      - api-gateway
+    volumes:
+      - ./top-frontend-finance:/app
+      - /app/node_modules
+    networks:
+      - app-network
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+
+volumes:
+  postgres_users_data:
+    driver: local
+  postgres_finance_data:
+    driver: local
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+
+networks:
+  app-network:
+    driver: bridge
+
