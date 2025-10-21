@@ -208,33 +208,15 @@ wait_for_db "localhost" "5433" "finance_db"
 
 sleep 2
 
-# Run migrations
-for project in "${BACKEND_PROJECTS[@]}"; do
-    if [ "$project" != "api-gateway" ]; then
-        PROJECT_PATH="$PROJECT_ROOT/$project"
-        print_step "Running migrations for $project..."
-        cd "$PROJECT_PATH"
-        if npm run migrate:latest > /tmp/migrate-$project.log 2>&1; then
-            print_success "Migrations completed for $project"
-        else
-            print_error "Migration failed for $project"
-            echo "Migration log:"
-            cat /tmp/migrate-$project.log
-            exit 1
-        fi
-
-        # Run seeds
-        print_step "Seeding database for $project..."
-        if npm run seed:run > /tmp/seed-$project.log 2>&1; then
-            print_success "Database seeded for $project"
-        else
-            print_error "Seeding failed for $project"
-            echo "Seed log:"
-            cat /tmp/seed-$project.log
-            exit 1
-        fi
-    fi
-done
+# Run migrations and seeds using Node.js script
+print_header "STEP 4B: RUNNING MIGRATIONS AND SEEDS"
+cd "$PROJECT_ROOT"
+if node setup-db.js; then
+    print_success "Database setup completed"
+else
+    print_error "Database setup failed"
+    exit 1
+fi
 
 # Step 5: Compile backend projects
 print_header "STEP 5: COMPILING BACKEND PROJECTS"
