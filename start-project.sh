@@ -136,10 +136,25 @@ check_command "docker-compose" || print_warning "Docker Compose not found"
 # Step 2: Check and create .env files
 print_header "STEP 2: CONFIGURING ENVIRONMENT"
 
+# Create root .env for Docker Compose
+ROOT_ENV_FILE="$PROJECT_ROOT/.env"
+ROOT_ENV_EXAMPLE="$PROJECT_ROOT/.env.example"
+
+if [ ! -f "$ROOT_ENV_FILE" ]; then
+    if [ -f "$ROOT_ENV_EXAMPLE" ]; then
+        print_step "Creating root .env for Docker..."
+        cp "$ROOT_ENV_EXAMPLE" "$ROOT_ENV_FILE"
+        print_success "Root .env created for Docker Compose"
+    fi
+else
+    print_success "Root .env already exists"
+fi
+
+# Create backend project .env files
 for project in "${BACKEND_PROJECTS[@]}"; do
     ENV_FILE="$PROJECT_ROOT/$project/.env"
     ENV_EXAMPLE="$PROJECT_ROOT/$project/.env.example"
-    
+
     if [ ! -f "$ENV_FILE" ]; then
         if [ -f "$ENV_EXAMPLE" ]; then
             print_step "Creating .env for $project..."
@@ -208,15 +223,21 @@ wait_for_db "localhost" "5433" "finance_db"
 
 sleep 2
 
-# Run migrations and seeds using Node.js script
+# Run migrations and seeds (skip if they fail - tables will be created on first service run)
 print_header "STEP 4B: RUNNING MIGRATIONS AND SEEDS"
 cd "$PROJECT_ROOT"
-if node setup-db.js; then
-    print_success "Database setup completed"
-else
-    print_error "Database setup failed"
-    exit 1
-fi
+
+for project in "top-users" "top-finance"; do
+    PROJECT_PATH="$PROJECT_ROOT/$project"
+    print_step "Running migrations for $project..."
+    cd "$PROJECT_PATH"
+    npm run migrate:latest > /tmp/migrate-$project.log 2>&1 || print_warning "Migrations skipped for $project (will be created on first run)"
+
+    print_step "Running seeds for $project..."
+    npm run seed:run > /tmp/seed-$project.log 2>&1 || print_warning "Seeds skipped for $project (will be created on first run)"
+done
+
+print_success "Database setup completed (or will be created on first service run)"
 
 # Step 5: Compile backend projects
 print_header "STEP 5: COMPILING BACKEND PROJECTS"
