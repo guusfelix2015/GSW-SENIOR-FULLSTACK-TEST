@@ -180,7 +180,7 @@ sleep 2
 print_step "Starting new PostgreSQL containers..."
 docker-compose up -d postgres-users postgres-finance 2>/dev/null || print_warning "Could not start Docker containers"
 print_step "Waiting for containers to initialize..."
-sleep 5
+sleep 10
 
 # Wait for databases to be ready with retry logic (infinite retry)
 print_step "Waiting for databases to be ready..."
