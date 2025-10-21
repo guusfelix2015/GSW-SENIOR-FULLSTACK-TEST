@@ -184,14 +184,13 @@ print_step "Waiting for databases to be ready..."
 wait_for_db() {
     local host=$1
     local port=$2
-    local user=$3
-    local password=$4
-    local db=$5
+    local db=$3
     local attempt=0
 
     while true; do
-        if PGPASSWORD="$password" psql -h "$host" -p "$port" -U "$user" -d "$db" -c "SELECT 1" >/dev/null 2>&1; then
-            print_success "Database $db is ready"
+        # Try multiple methods to check if port is open
+        if nc -z "$host" "$port" >/dev/null 2>&1 || timeout 1 bash -c "echo >/dev/tcp/$host/$port" >/dev/null 2>&1; then
+            print_success "Database $db port $port is ready"
             return 0
         fi
         attempt=$((attempt + 1))
@@ -201,8 +200,8 @@ wait_for_db() {
 }
 
 # Wait for both databases (will wait indefinitely until they're ready)
-wait_for_db "localhost" "5432" "postgres" "postgres" "users_db"
-wait_for_db "localhost" "5433" "postgres" "postgres" "finance_db"
+wait_for_db "localhost" "5432" "users_db"
+wait_for_db "localhost" "5433" "finance_db"
 
 sleep 2
 
