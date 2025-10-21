@@ -170,14 +170,16 @@ print_header "STEP 4: SETTING UP DATABASE"
 print_step "Starting PostgreSQL containers..."
 cd "$PROJECT_ROOT"
 
-# Check if containers are already running
-if docker ps | grep -q "postgres-users"; then
-    print_warning "postgres-users container already running"
-else
-    docker-compose up -d postgres-users postgres-finance 2>/dev/null || print_warning "Could not start Docker containers"
-    print_step "Waiting for containers to initialize..."
-    sleep 5
-fi
+# Remove old containers to avoid password conflicts
+print_step "Cleaning up old containers..."
+docker-compose down 2>/dev/null || true
+sleep 2
+
+# Start fresh containers
+print_step "Starting new PostgreSQL containers..."
+docker-compose up -d postgres-users postgres-finance 2>/dev/null || print_warning "Could not start Docker containers"
+print_step "Waiting for containers to initialize..."
+sleep 5
 
 # Wait for databases to be ready with retry logic (infinite retry)
 print_step "Waiting for databases to be ready..."
